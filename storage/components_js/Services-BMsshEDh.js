@@ -1,0 +1,1 @@
+import{p as e,t}from"./app-rqBw8eM0.js";import n from"./Category-CeuiXaBl.js";e();var r=t();function i({category:e,posts:t,service:i,page:a}){return(0,r.jsx)(n,{category:e,posts:t,service:i,canonicalPath:`/services`,page:a})}export{i as default};

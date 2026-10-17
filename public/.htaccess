@@ -1,0 +1,133 @@
+# ==============================================================================
+# Generator Dubai CMS - Hardened Public Apache Configuration
+# Enterprise Security, Bot Filtering, Upload Protection, and Security Headers
+# ==============================================================================
+
+# 1. Disable directory browsing, server signature, and script execution in public
+Options -MultiViews -Indexes -ExecCGI
+ServerSignature Off
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Canonical: Enforce non-www
+    RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+    RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
+
+    # Canonical: Enforce HTTPS (excluding local development environments)
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:\d+)?$ [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # 2. Block direct execution of any script or PHP file inside public subfolders
+    RewriteCond %{REQUEST_URI} ^/(storage|images|uploads|media|css|js|build)/.*(?i)\.(php|phtml|php[0-9]|phps|phar|sh|cgi|py|exe|pl|bat|cmd|jsp|asp|aspx)$
+    RewriteRule .* - [F,L]
+
+    # 3. Block malicious HTTP request methods
+    RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|DEBUG) [NC]
+    RewriteRule .* - [F,L]
+
+    # 4. Block common web attack patterns in query strings (SQLi, Path Traversal, RFI, XSS)
+    RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|%2e%2e) [NC,OR]
+    RewriteCond %{QUERY_STRING} (union.*select|insert.*into|drop.*table|benchmark\(|sleep\(|waitfor.*delay) [NC,OR]
+    RewriteCond %{QUERY_STRING} (=http(s)?://|=ftp://) [NC,OR]
+    RewriteCond %{QUERY_STRING} (base64_encode|base64_decode|eval\(|<.*script.*>) [NC]
+    RewriteRule .* - [F,L]
+
+    # 5. Block known malicious vulnerability scanners and exploit bots
+    RewriteCond %{HTTP_USER_AGENT} (sqlmap|nikto|havij|acunetix|wpscan|masscan|zgrab|nmap|nessus|openvas|dirbuster|gobuster|jbrofuzz|pangolin|cgiscan) [NC]
+    RewriteRule .* - [F,L]
+
+    # 6. Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # 7. Handle X-XSRF-Token Header
+    RewriteCond %{HTTP:x-xsrf-token} .
+    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+
+    # 8. Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # 9. Send Requests To Front Controller (Laravel index.php)...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# 10. Deny access to sensitive extensions and hidden files
+<FilesMatch "^\.|\.(bak|config|sql|sqlite|ini|log|sh|inc|swp|dist|env|yml|yaml|md|json|lock)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# 11. Enforce HTTP Security Headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+    Header always set X-Permitted-Cross-Domain-Policies "none"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header unset X-Powered-By
+    Header unset Server
+</IfModule>
+
+# 12. Gzip / Deflate Compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript
+    AddOutputFilterByType DEFLATE application/javascript application/x-javascript application/json application/xml application/rss+xml
+    AddOutputFilterByType DEFLATE image/svg+xml font/ttf font/otf font/woff font/woff2 application/vnd.ms-fontobject
+</IfModule>
+
+# 13. Static Asset Browser Caching (Expires & Cache-Control)
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 month"
+
+    # Images & Media
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/x-icon "access plus 1 year"
+
+    # Web Fonts
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/ttf "access plus 1 year"
+    ExpiresByType font/otf "access plus 1 year"
+    ExpiresByType application/vnd.ms-fontobject "access plus 1 year"
+
+    # CSS & JavaScript
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType text/javascript "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+
+    # HTML & Data
+    ExpiresByType text/html "access plus 0 seconds"
+    ExpiresByType application/json "access plus 0 seconds"
+    ExpiresByType application/xml "access plus 0 seconds"
+</IfModule>
+
+<IfModule mod_headers.c>
+    # 1 Year Immutable Cache for fingerprinted assets and media
+    <FilesMatch "\.(css|js|woff2|woff|ttf|svg|webp|png|jpg|jpeg|gif|ico)$">
+        Header set Cache-Control "max-age=31536000, public, immutable"
+    </FilesMatch>
+    # Dynamic HTML revalidation
+    <FilesMatch "\.(html|php)$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+    </FilesMatch>
+</IfModule>
+
